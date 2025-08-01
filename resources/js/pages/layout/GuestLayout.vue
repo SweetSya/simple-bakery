@@ -17,21 +17,21 @@ function toggleDarkMode() {
 </script>
 
 <template>
-    <nav class="border-gray-200 bg-white dark:bg-gray-900">
+    <nav class="relative z-20 border-gray-200 bg-white dark:bg-gray-900">
         <div class="mx-auto flex max-w-screen-xl flex-wrap items-center justify-between p-4">
             <Link href="/" class="flex items-center space-x-3 rtl:space-x-reverse">
                 <img src="/assets/logo.png" class="h-8 rounded-full" alt="Logo" />
-                <span class="self-center text-2xl font-semibold whitespace-nowrap dark:text-white">Rivies Bakery</span>
+                <span class="self-center text-2xl font-semibold whitespace-nowrap dark:text-white">Bakery</span>
             </Link>
             <div class="flex items-center space-x-6 rtl:space-x-reverse">
                 <label class="relative inline-flex cursor-pointer items-center">
                     <input @change="toggleDarkMode()" type="checkbox" :checked="appearance === 'dark'" class="peer sr-only" />
                     <div
-                        class="peer relative h-6 w-11 rounded-full bg-gray-200 peer-checked:bg-blue-600 peer-focus:ring-4 peer-focus:ring-blue-300 peer-focus:outline-none after:absolute after:start-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:after:translate-x-full peer-checked:after:border-white rtl:peer-checked:after:-translate-x-full dark:border-gray-600 dark:bg-gray-700 dark:peer-checked:bg-blue-600 dark:peer-focus:ring-blue-800"
+                        class="peer relative h-6 w-11 rounded-full bg-gray-200 peer-checked:bg-cyan-600 peer-focus:ring-4 peer-focus:ring-cyan-300 peer-focus:outline-none after:absolute after:start-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:after:translate-x-full peer-checked:after:border-white rtl:peer-checked:after:-translate-x-full dark:border-gray-600 dark:bg-gray-700 dark:peer-checked:bg-cyan-600 dark:peer-focus:ring-cyan-800"
                     ></div>
                     <span class="absolute top-0 ms-3 text-sm font-medium text-gray-900">
                         <template v-if="appearance === 'dark'">
-                            <Moon class="absolute top-0 left-3 w-4" />
+                            <Moon class="absolute top-0 left-[13px] w-4" />
                         </template>
                         <template v-else>
                             <Sun class="absolute top-0 -right-2 w-4" />
@@ -49,7 +49,7 @@ function toggleDarkMode() {
     </nav>
     <!-- Main Wrapper -->
     <main class="sticky z-10">
-        <nav class="sticky top-0 z-50 bg-gray-50 dark:bg-gray-800">
+        <nav class="sticky top-0 z-50 bg-gray-50 dark:bg-gray-800 border-b dark:border-gray-600 border-gray-300">
             <div class="mx-auto max-w-screen-xl px-4 py-3">
                 <div class="flex items-center">
                     <ul class="mt-0 flex flex-row space-x-8 text-sm font-medium">

@@ -38,13 +38,13 @@ const { formatRupiah } = useFormatter();
                     <input
                         type="search"
                         id="default-search"
-                        class="block w-full rounded-lg border border-gray-300 bg-gray-50 p-4 ps-10 text-sm text-gray-900 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400 dark:focus:border-blue-500 dark:focus:ring-blue-500"
+                        class="block w-full rounded-lg border border-gray-300 bg-gray-50 p-4 ps-10 text-sm text-gray-900 focus:border-cyan-500 focus:ring-cyan-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400 dark:focus:border-cyan-500 dark:focus:ring-cyan-500"
                         placeholder="Telusuri produk.."
                         required
                     />
                     <button
                         type="submit"
-                        class="absolute end-2.5 bottom-2.5 rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800 focus:ring-4 focus:ring-blue-300 focus:outline-none dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800"
+                        class="absolute end-2.5 bottom-2.5 rounded-lg bg-cyan-700 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-800 focus:ring-4 focus:ring-cyan-300 focus:outline-none dark:bg-cyan-600 dark:hover:bg-cyan-700 dark:focus:ring-cyan-800"
                     >
                         Cari
                     </button>
@@ -72,7 +72,7 @@ const { formatRupiah } = useFormatter();
 
                         <a
                             href="#"
-                            class="flex w-full justify-center gap-3 rounded-lg bg-blue-700 px-5 py-2.5 text-center text-sm font-medium text-white hover:bg-blue-800 focus:ring-4 focus:ring-blue-300 focus:outline-none dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800"
+                            class="flex w-full justify-center gap-3 rounded-lg bg-cyan-700 px-5 py-2.5 text-center text-sm font-medium text-white hover:bg-cyan-800 focus:ring-4 focus:ring-cyan-300 focus:outline-none dark:bg-cyan-600 dark:hover:bg-cyan-700 dark:focus:ring-cyan-800"
                         >
                             <ShoppingCart class="h-4" /> Beli</a
                         >
