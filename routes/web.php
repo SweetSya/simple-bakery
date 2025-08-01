@@ -4,11 +4,11 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
 Route::get('/', function () {
-    return Inertia::render('guest/Index', [
-        'title' => 'Guestbook',
-        'description' => 'A simple guestbook application built with Laravel and Inertia.js.',
-    ]);
+    return Inertia::render('Home');
 })->name('home');
 
+Route::get('/login', function () {
+    return Inertia::render('Login');
+})->name('login');
 // require __DIR__.'/settings.php';
 // require __DIR__.'/auth.php';
