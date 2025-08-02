@@ -4,6 +4,8 @@ namespace App\Http\Middleware;
 
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cookie;
+use Illuminate\Support\Facades\Log;
 use Inertia\Middleware;
 use Tighten\Ziggy\Ziggy;
 
@@ -37,12 +39,11 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        // G
         [$message, $author] = str(Inspiring::quotes()->random())->explode('-');
-
         return [
             ...parent::share($request),
             'name' => config('app.name'),
-            'quote' => ['message' => trim($message), 'author' => trim($author)],
             'auth' => [
                 'user' => $request->user(),
             ],
@@ -51,6 +52,24 @@ class HandleInertiaRequests extends Middleware
                 'location' => $request->url(),
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
+            'flash' => $this->getFlashData($request)
         ];
+    }
+
+    public function getFlashData(Request $request): array
+    {
+        $flashData = [
+            'success' => $request->hasCookie('notyf_flash_success') ? $request->cookie('notyf_flash_success') : null,
+            'error' => $request->hasCookie('notyf_flash_error') ? $request->cookie('notyf_flash_error') : null,
+            'warning' => $request->hasCookie('notyf_flash_warning') ? $request->cookie('notyf_flash_warning') : null,
+            'info' => $request->hasCookie('notyf_flash_info') ? $request->cookie('notyf_flash_info') : null,
+        ];
+        // Delete cookies after retrieving their values
+        foreach ($flashData as $key => $value) {
+            if ($value) {
+                Cookie::queue(Cookie::forget('notyf_flash_' . $key));
+            }
+        }
+        return $flashData;
     }
 }
