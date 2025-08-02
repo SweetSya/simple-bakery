@@ -16,10 +16,11 @@ const form = useForm({
 });
 
 const handleLogin = () => {
-    axios.get('/sanctum/csrf-cookie');
     form.post(route('login'), {
         onFinish: () => form.reset('password'),
-        onSuccess: () => {},
+        onSuccess: () => {
+            window.location.reload(); // This refreshes everything and updates CSRF
+        },
         onError: (errors) => {
             if (errors.email) {
                 notyf.error(errors.email);

@@ -50,6 +50,7 @@ class AuthenticateController extends Controller
 
         $intendedUrl = Session::get('url.intended', route('dashboard'));
         $request->session()->regenerate();
+        $request->session()->regenerateToken();
 
         // If authentication is successful, redirect to the intended URL or dashboard
         return redirect()->to($intendedUrl)

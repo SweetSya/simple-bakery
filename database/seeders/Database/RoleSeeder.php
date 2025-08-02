@@ -15,9 +15,9 @@ class RoleSeeder extends Seeder
     {
         // Create roles
         $roles = [
-            ['name' => 'administrator2', 'description' => 'Administrator role with full access'],
-            ['name' => 'staff2', 'description' => 'Staff role with limited access'],
-            ['name' => 'guest2', 'description' => 'Guest role with minimal access'],
+            ['name' => 'administrator', 'description' => 'Administrator role with full access'],
+            ['name' => 'staff', 'description' => 'Staff role with limited access'],
+            ['name' => 'guest', 'description' => 'Guest role with minimal access'],
         ];
 
         foreach ($roles as $role) {

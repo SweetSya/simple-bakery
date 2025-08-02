@@ -25,7 +25,7 @@ function toggleDarkMode() {
 </script>
 
 <template>
-    <nav class="relative z-20 border-gray-200 bg-slate-100 dark:bg-gray-900">
+    <nav class="relative z-10 border-gray-200 bg-slate-100 dark:bg-gray-900">
         <div class="mx-auto flex flex-wrap items-center justify-between p-4">
             <button
                 data-drawer-target="sidebar-menu"
@@ -64,7 +64,7 @@ function toggleDarkMode() {
 
     <aside
         id="sidebar-menu"
-        class="fixed top-0 left-0 z-40 h-screen w-64 -translate-x-full transition-transform sm:translate-x-0"
+        class="fixed top-0 left-0 z-[31] sm:z-[11] h-screen w-64 -translate-x-full transition-transform sm:translate-x-0"
         aria-label="Sidebar"
     >
         <div class="h-full overflow-y-auto bg-gray-50 px-3 pt-4 pb-8 dark:bg-gray-800">
@@ -152,7 +152,7 @@ function toggleDarkMode() {
         </div>
     </aside>
     <!-- Main Wrapper -->
-    <main class="sticky z-10">
+    <main>
         <!-- App Content -->
         <div class="p-4 sm:ml-64">
             <slot />
