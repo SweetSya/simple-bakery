@@ -3,6 +3,9 @@
 @import 'tw-animate-css';
 
 @import 'flowbite/src/themes/default';
+/* Import DataTables CSS */
+@import 'datatables.net-dt';
+
 @plugin "flowbite/plugin";
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
@@ -60,6 +63,38 @@
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-ring: var(--sidebar-ring);
+}
+
+/* Custom styling for better integration */
+.dataTables_wrapper {
+    @apply text-sm;
+}
+
+.dataTables_wrapper .dataTables_length,
+.dataTables_wrapper .dataTables_filter,
+.dataTables_wrapper .dataTables_info,
+.dataTables_wrapper .dataTables_paginate {
+    @apply text-gray-600 dark:text-gray-400;
+}
+
+.dataTables_wrapper .dataTables_filter input {
+    @apply rounded border border-gray-300 px-3 py-1 dark:border-gray-600 dark:bg-gray-700 dark:text-white;
+}
+
+.dataTables_wrapper .dataTables_length select {
+    @apply rounded border border-gray-300 px-2 py-1 dark:border-gray-600 dark:bg-gray-700 dark:text-white;
+}
+
+table.dataTable thead th {
+    @apply bg-gray-50 font-semibold text-gray-900 dark:bg-gray-700 dark:text-white;
+}
+
+table.dataTable tbody td {
+    @apply border-gray-200 text-gray-900 dark:border-gray-600 dark:text-gray-100;
+}
+
+table.dataTable tbody tr:hover {
+    @apply bg-gray-50 dark:bg-gray-700;
 }
 
 /*

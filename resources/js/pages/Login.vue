@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useNotyf } from '@/composables/useNotyf';
 import { Link, useForm } from '@inertiajs/vue3';
+import axios from 'axios';
 import GuestLayout from './layout/GuestLayout.vue';
 
 const notyf = useNotyf();
@@ -15,11 +16,10 @@ const form = useForm({
 });
 
 const handleLogin = () => {
+    axios.get('/sanctum/csrf-cookie');
     form.post(route('login'), {
         onFinish: () => form.reset('password'),
-        onSuccess: () => {
-            notyf.success('Login berhasil! Selamat datang di Bakery.');
-        },
+        onSuccess: () => {},
         onError: (errors) => {
             if (errors.email) {
                 notyf.error(errors.email);

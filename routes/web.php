@@ -17,5 +17,5 @@ Route::get('/logout', [AuthenticateController::class, 'destroy'])->name('logout'
 Route::get('/register', [RegisterController::class, 'view'])->name('register');
 Route::post('/register', [RegisterController::class, 'store'])->name('register');
 Route::post('/register', [RegisterController::class, 'store'])->name('register');
-// require __DIR__.'/settings.php';
-require __DIR__.'/auth.php';
+
+require __DIR__ . '/auth.php';

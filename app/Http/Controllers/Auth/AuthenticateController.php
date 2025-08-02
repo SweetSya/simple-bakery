@@ -8,6 +8,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cookie;
+use Illuminate\Support\Facades\Session;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -36,20 +37,23 @@ class AuthenticateController extends Controller
             'email' => 'required|email',
             'password' => 'required|string',
         ]);
+
         // Attempt to authenticate the user
         if (!Auth::attempt($request->only('email', 'password'), $request->filled('remember'))) {
             // If authentication fails, redirect back with an error
-            return redirect()->back()
+            return back()
                 ->withInput($request->only('email', 'remember'))
                 ->withErrors([
                     'email' => __('auth.failed'),
                 ]);
         }
 
-        // If authentication is successful, regenerate the session
+        $intendedUrl = Session::get('url.intended', route('dashboard'));
         $request->session()->regenerate();
 
-        return redirect()->intended(route('dashboard'));
+        // If authentication is successful, redirect to the intended URL or dashboard
+        return redirect()->to($intendedUrl)
+            ->withCookie(Cookie::make('notyf_flash_success', 'Berhasil login.', 1));
     }
 
     /**
@@ -57,12 +61,16 @@ class AuthenticateController extends Controller
      */
     public function destroy(Request $request): RedirectResponse
     {
+        // Log out the user
         Auth::guard('web')->logout();
 
+        // Invalidate the session
         $request->session()->invalidate();
+
+        // Regenerate the CSRF token
         $request->session()->regenerateToken();
 
         return redirect()->route('login')
-            ->withCookie(Cookie::make('notyf_flash_success', 'Berhasil logout.'));
+            ->withCookie(Cookie::make('notyf_flash_success', 'Berhasil logout.', 1));
     }
 }

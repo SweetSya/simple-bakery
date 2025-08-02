@@ -20,7 +20,7 @@ return new class extends Migration
             $table->decimal('total_amount', 10, 2);
             $table->json('payment_details')->nullable();
             $table->enum('status', ['pending', 'payment', 'paid', 'delivered'])->default('pending');
-            $table->boolean('is_complete')->default(false);
+            $table->boolean('is_completed')->default(false);
             $table->text('notes')->nullable();
             $table->softDeletes();
             $table->timestamps();

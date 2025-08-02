@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cookie;
 use Inertia\Inertia;
 
 class RegisterController extends Controller
@@ -32,6 +33,6 @@ class RegisterController extends Controller
             'role' => Role::where('name', 'guest')->first()->id,
         ]);
 
-        return redirect()->route('login')->with('success', 'Registration successful. Please log in.');
+        return redirect()->route('login')->withCookie(Cookie::make('notyf_flash_success', 'Registrasi berhasil, silakan masuk.'));
     }
 }
