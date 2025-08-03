@@ -27,7 +27,6 @@ class CheckAuthentication
             }
             // If authenticated but not authorized, redirect to the dashboard
             return redirect()->route('dashboard')->withCookie(Cookie::make('notyf_flash_error', 'Anda tidak memiliki akses ke halaman ini.', 1)); // 1 minute expiry
-
         }
         return redirect()->route('login')->withCookie(Cookie::make('notyf_flash_error', 'Harap lakukan autentikasi terlebih dahulu.', 1));
     }

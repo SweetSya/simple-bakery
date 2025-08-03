@@ -10,15 +10,13 @@ use Inertia\Inertia;
 
 class RoleController extends Controller
 {
-    protected $model = Role::class;
-
     // Display the list of roles
     public function view()
     {
         return Inertia::render('auth/Role');
     }
 
-    // Retrieve all roles (already correct)
+    // Retrieve all roles
     public function all(Request $request)
     {
         $draw = $request->get('draw');
@@ -58,6 +56,11 @@ class RoleController extends Controller
         ]);
     }
 
+    // Display the create role view
+    public function create_view()
+    {
+        return Inertia::render('auth/Role/CreateRole');
+    }
     // Create a new role
     public function create(Request $request)
     {
@@ -69,11 +72,11 @@ class RoleController extends Controller
         try {
             $role = Role::create($request->only('name', 'description'));
 
-            return redirect()->route('role.view')
+            return back()
                 ->withCookie(Cookie::make('notyf_flash_success', 'Role created successfully.', 1));
         } catch (\Exception $e) {
             return back()
-                ->withInput()
+                ->withInput($request->only('name', 'description'))
                 ->withCookie(Cookie::make('notyf_flash_error', 'Failed to create role.', 1));
         }
     }
@@ -131,6 +134,28 @@ class RoleController extends Controller
         ]);
     }
 
+    // update role view
+    public function update_view(Request $request)
+    {
+        $id = $request->get('id');
+        if (!$id) {
+            return back()
+                ->withCookie(Cookie::make('notyf_flash_error', 'Role ID is required.', 1));
+        }
+        $role = Role::find($id);
+        if (!$role) {
+            return back()
+                ->withCookie(Cookie::make(
+                    'notyf_flash_error',
+                    'Role not found.',
+                    1
+                ));
+        }
+
+        return Inertia::render('auth/Role/UpdateRole', [
+            'role' => $role
+        ]);
+    }
     // Update role
     public function update(Request $request)
     {

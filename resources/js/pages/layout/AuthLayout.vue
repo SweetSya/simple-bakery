@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Breadcrumb from '@/components/Breadcrumb.vue';
 import { useAppearance } from '@/composables/useAppearance';
 import { useFlashMessages } from '@/composables/useFlashMessages';
 import { Link, usePage } from '@inertiajs/vue3';
@@ -13,6 +14,25 @@ const currentRoute = computed(() => {
 });
 // Initialize flash messages
 useFlashMessages();
+
+const breadCrumb = computed(() => {
+    // Get current url and split by dot to get the segments
+    const segments = page.url.split('/');
+    // Remove the first empty segment if it exists
+    if (segments[0] === '') {
+        segments.shift();
+    }
+    if (segments[0] === 'admin-panel') {
+        segments.shift();
+    }
+    // Get the last segment as the current route
+    const route = String(page.props.current_route);
+    return {
+        routes: route?.split('.'),
+        segments: segments,
+    };
+});
+console.log('Breadcrumb:', breadCrumb.value);
 
 // Get appearance state and setter
 const { appearance, updateAppearance } = useAppearance();
@@ -64,7 +84,7 @@ function toggleDarkMode() {
 
     <aside
         id="sidebar-menu"
-        class="fixed top-0 left-0 z-[31] sm:z-[11] h-screen w-64 -translate-x-full transition-transform sm:translate-x-0"
+        class="fixed top-0 left-0 z-[31] h-screen w-64 -translate-x-full transition-transform sm:z-[11] sm:translate-x-0"
         aria-label="Sidebar"
     >
         <div class="h-full overflow-y-auto bg-gray-50 px-3 pt-4 pb-8 dark:bg-gray-800">
@@ -105,7 +125,7 @@ function toggleDarkMode() {
                 </li>
                 <li>
                     <Link
-                        href="#"
+                        href="/admin-panel/user"
                         :class="currentRoute === 'user' ? 'bg-gray-100 opacity-70 dark:bg-gray-700' : ''"
                         class="group flex items-center rounded-lg p-2 text-gray-900 hover:bg-gray-100 dark:text-white dark:hover:bg-gray-700"
                     >
@@ -153,8 +173,17 @@ function toggleDarkMode() {
     </aside>
     <!-- Main Wrapper -->
     <main>
+        <!-- Breadcrumb -->
+
+        <!-- Breadcrumb -->
+        <div class="p-5">
+            <div class="sm:ml-64">
+                <Breadcrumb />
+            </div>
+        </div>
+
         <!-- App Content -->
-        <div class="p-4 sm:ml-64">
+        <div class="px-5 pb-5 sm:ml-64">
             <slot />
         </div>
     </main>
