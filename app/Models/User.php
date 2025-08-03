@@ -11,11 +11,13 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use OwenIt\Auditing\Auditable;
+use OwenIt\Auditing\Contracts\Auditable as ContractsAuditable;
 
-class User extends Authenticatable
+class User extends Authenticatable implements ContractsAuditable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable, HasUuids, SoftDeletes;
+    use HasFactory, Notifiable, HasUuids, SoftDeletes, Auditable;
 
     /**
      * The attributes that are mass assignable.
@@ -61,4 +63,10 @@ class User extends Authenticatable
     {
         return $this->hasMany(JobWatcher::class);
     }
+
+    protected $auditInclude = [
+        'name',
+        'email',
+        'role_id',
+    ];
 }

@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
+use OwenIt\Auditing\Models\Audit;
 
 class UserController extends Controller
 {
@@ -109,18 +110,38 @@ class UserController extends Controller
             return back()
                 ->withCookie(Cookie::make('notyf_flash_error', 'User ID is required.', 1));
         }
+
         $user = User::find($id);
         if (!$user) {
             return back()
-                ->withCookie(Cookie::make(
-                    'notyf_flash_error',
-                    'User not found.',
-                    1
-                ));
+                ->withCookie(Cookie::make('notyf_flash_error', 'User not found.', 1));
         }
 
+        // Get audit logs for detail view
+        $auditLogs = $user->audits()
+            ->with('user')
+            ->orderBy('created_at', 'desc')
+            ->take(20) // More logs for detail view
+            ->get()
+            ->map(function ($audit) {
+                return [
+                    'id' => $audit->id,
+                    'event' => $audit->event,
+                    'action' => $this->formatAuditAction($audit),
+                    'old_values' => $audit->old_values,
+                    'new_values' => $audit->new_values,
+                    'user_name' => $audit->user ? $audit->user->name : 'System',
+                    'ip_address' => $audit->ip_address,
+                    'user_agent' => $audit->user_agent,
+                    'url' => $audit->url,
+                    'created_at' => $audit->created_at->toISOString(),
+                    'created_at_human' => $audit->created_at->diffForHumans(),
+                ];
+            });
+
         return Inertia::render('auth/User/DetailUser', [
-            'user' => $user->load('role')
+            'user' => $user->load('role'),
+            'auditLogs' => $auditLogs
         ]);
     }
     // Delete users
@@ -195,7 +216,11 @@ class UserController extends Controller
         }
 
         return Inertia::render('auth/User/UpdateUser', [
-            'user' => $user->load('role')
+            'user' => $user->load('role'),
+            'auditLogs' => Audit::where('auditable_type', User::class)
+                ->where('auditable_id', $id)
+                ->orderBy('created_at', 'desc')
+                ->paginate(10)
         ]);
     }
     // Update user
@@ -527,5 +552,31 @@ class UserController extends Controller
             'skipped' => $skipped,
             'errors' => $errors
         ];
+    }
+    private function formatAuditAction($audit)
+    {
+        $action = ucfirst($audit->event);
+        $changes = [];
+
+        if ($audit->event === 'updated' && $audit->old_values && $audit->new_values) {
+            foreach ($audit->new_values as $field => $newValue) {
+                $oldValue = $audit->old_values[$field] ?? 'N/A';
+
+                // Format field names nicely
+                $fieldName = ucwords(str_replace('_', ' ', $field));
+
+                // Handle specific fields
+                switch ($field) {
+                    default:
+                        $changes[] = "({$fieldName}) {$oldValue} into {$newValue}";
+                }
+            }
+        }
+
+        if (!empty($changes)) {
+            return $action . ' : ' . implode(', ', $changes) . '';
+        }
+
+        return $action;
     }
 }

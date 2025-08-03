@@ -11,6 +11,7 @@ defineOptions({ layout: AuthLayout });
 const page = usePage();
 const userId = computed(() => page.props.user?.id);
 const user = computed(() => page.props.user as any);
+const auditLogs = computed(() => page.props.auditLogs || []);
 const userTabs = useUserTabs(userId.value);
 </script>
 
@@ -90,4 +91,24 @@ const userTabs = useUserTabs(userId.value);
             </div>
         </div>
     </ManageDataLayout>
+    <div class="my-4">
+        <div class="mb-4 border-b border-gray-200 pb-2 dark:border-gray-700">
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Audit Logs</h1>
+            <p class="text-gray-600 dark:text-gray-400">This section displays the audit logs for the user.</p>
+        </div>
+
+        <ol class="relative border-s border-gray-200 dark:border-gray-700">
+            <li v-for="log in auditLogs" :key="log.id" class="ms-4">
+                <div
+                    class="absolute -start-1.5 mt-1.5 h-3 w-3 rounded-full border border-white bg-gray-200 dark:border-gray-900 dark:bg-gray-700"
+                ></div>
+                <time class="mb-1 text-sm leading-none font-normal text-gray-400 dark:text-gray-500">{{
+                    new Date(log.created_at).toLocaleString()
+                }}</time>
+                <p class="text-base font-normal text-gray-500 dark:text-gray-400">
+                    {{ log.action }}
+                </p>
+            </li>
+        </ol>
+    </div>
 </template>

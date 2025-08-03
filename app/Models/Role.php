@@ -6,10 +6,12 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use OwenIt\Auditing\Auditable;
+use OwenIt\Auditing\Contracts\Auditable as ContractsAuditable;
 
-class Role extends Model
+class Role extends Model implements ContractsAuditable
 {
-    use SoftDeletes, HasUuids;
+    use SoftDeletes, HasUuids, Auditable;
 
     protected $fillable = [
         'name',
