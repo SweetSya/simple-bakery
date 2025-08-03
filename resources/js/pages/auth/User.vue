@@ -8,7 +8,7 @@ import DataTablesLib from 'datatables.net';
 import DataTable from 'datatables.net-vue3';
 import type { InstanceOptions, ModalInterface, ModalOptions } from 'flowbite';
 import { Modal } from 'flowbite';
-import { X } from 'lucide-vue-next';
+import { AlertCircle, CheckCircle2, FileText, Upload, X } from 'lucide-vue-next';
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import AuthLayout from '../layout/AuthLayout.vue';
 
@@ -360,7 +360,6 @@ const modalOptions: ModalOptions = {
 // Reactive modal state
 const modalExportState = reactive({
     isOpen: false,
-    isAll: false,
     exportFormat: 'csv',
     exportType: 'selected', // 'selected' or 'all'
     exportFields: [],
@@ -378,7 +377,7 @@ const columnsToExport = computed(() => [
     { label: 'ID', value: 'id' },
     { label: 'Name', value: 'name' },
     { label: 'Email', value: 'email' },
-    { label: 'Role', value: 'role.name' },
+    { label: 'Role', value: 'role_id' },
     { label: 'Email Verified', value: 'email_verified_at' },
     { label: 'Created At', value: 'created_at' },
 ]);
@@ -421,7 +420,6 @@ const handleExport = async () => {
 
     try {
         const requestData = {
-            all: modalExportState.isAll,
             format: modalExportState.exportFormat,
             fields: modalExportState.exportFields,
             ...(modalExportState.exportType === 'selected' ? { ids: selectedRows.value } : { export_all: true }),
@@ -430,7 +428,7 @@ const handleExport = async () => {
         const response = await axios.post(`${page.props.ziggy.location}/export`, requestData);
 
         if (response.status === 200) {
-            const successMessage = `${response.data.message}( ${selectedCount.value} rows )`;
+            const successMessage = `${response.data.message}( ${response.data.total} rows )`;
 
             notyf.success(successMessage);
             closeExportModal();
@@ -438,10 +436,11 @@ const handleExport = async () => {
             throw new Error(response.data.message || 'Failed to export users');
         }
     } catch (error) {
-        console.error('Error exporting users:', error);
+        console.error('Error exporting users:', error.message || error);
         notyf.error(error.message || 'Failed to export users');
     } finally {
         modalExportState.isLoading = false;
+        modalExportState.exportFields = [];
     }
 };
 const handleClearAll = () => {
@@ -463,22 +462,283 @@ const exportSelected = () => {
 };
 
 const exportAll = () => {
-    modalExportState.isAll = true;
     openExportModal('all');
+};
+
+// Import modal state
+const modalImportState = reactive({
+    isOpen: false,
+    isLoading: false,
+    step: 1, // 1: file upload, 2: field mapping, 3: preview/confirmation
+    title: 'Import Users',
+    file: null as File | null,
+    filePreview: [] as any[],
+    fieldMapping: {} as Record<string, string>,
+    availableFields: [] as string[],
+    dbFields: [
+        { value: 'name', label: 'Full Name', required: true },
+        { value: 'email', label: 'Email Address', required: true },
+        { value: 'password', label: 'Password', required: false },
+        { value: 'role_id', label: 'Role ID', required: false },
+        { value: 'email_verified_at', label: 'Email Verified', required: false },
+    ],
+    errors: [] as string[],
+    importResults: null as any,
+});
+
+// Modal instances
+const modalImportInstance = ref<ModalInterface | null>(null);
+const fileInputRef = ref<HTMLInputElement | null>(null);
+
+// Import functions
+const openImportModal = () => {
+    resetImportModal();
+    if (modalImportInstance.value) {
+        modalImportInstance.value.show();
+        modalImportState.isOpen = true;
+    }
+};
+
+const closeImportModal = () => {
+    if (modalImportInstance.value) {
+        modalImportInstance.value.hide();
+        modalImportState.isOpen = false;
+        resetImportModal();
+    }
+};
+
+const resetImportModal = () => {
+    modalImportState.step = 1;
+    modalImportState.file = null;
+    modalImportState.filePreview = [];
+    modalImportState.fieldMapping = {};
+    modalImportState.availableFields = [];
+    modalImportState.errors = [];
+    modalImportState.importResults = null;
+    modalImportState.isLoading = false;
+    if (fileInputRef.value) {
+        fileInputRef.value.value = '';
+    }
+};
+
+const handleFileUpload = async (event: Event) => {
+    const target = event.target as HTMLInputElement;
+    const file = target.files?.[0];
+
+    if (!file) return;
+
+    // Validate file type
+    const allowedTypes = ['text/csv', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'];
+
+    if (!allowedTypes.includes(file.type)) {
+        notyf.error('Please upload a CSV or Excel file');
+        return;
+    }
+
+    // Validate file size (10MB max)
+    if (file.size > 10 * 1024 * 1024) {
+        notyf.error('File size must be less than 10MB');
+        return;
+    }
+
+    modalImportState.file = file;
+    modalImportState.isLoading = true;
+
+    try {
+        // Upload file and get preview
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await axios.post(`${page.props.ziggy.location}/import/preview`, formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
+
+        if (response.data.success) {
+            modalImportState.filePreview = response.data.preview;
+            modalImportState.availableFields = response.data.headers;
+            modalImportState.step = 2;
+
+            // Auto-map common fields
+            autoMapFields();
+        } else {
+            throw new Error(response.data.message || 'Failed to process file');
+        }
+    } catch (error: any) {
+        console.error('Error uploading file:', error);
+        notyf.error(error.response?.data?.message || 'Failed to process file');
+        resetImportModal();
+    } finally {
+        modalImportState.isLoading = false;
+    }
+};
+
+const autoMapFields = () => {
+    // Auto-map common field names
+    const commonMappings: Record<string, string[]> = {
+        name: ['name', 'full_name', 'fullname', 'user_name', 'username'],
+        email: ['email', 'email_address', 'mail'],
+        password: ['password', 'pass'],
+        role_id: ['role', 'role_id', 'user_role'],
+    };
+
+    modalImportState.availableFields.forEach((field) => {
+        const normalizedField = field.toLowerCase().replace(/[^a-z0-9]/g, '_');
+
+        for (const [dbField, variations] of Object.entries(commonMappings)) {
+            if (variations.some((variation) => normalizedField.includes(variation))) {
+                modalImportState.fieldMapping[field] = dbField;
+                break;
+            }
+        }
+    });
+};
+
+const handleFieldMapping = (csvField: string, dbField: string) => {
+    if (dbField === '') {
+        delete modalImportState.fieldMapping[csvField];
+    } else {
+        modalImportState.fieldMapping[csvField] = dbField;
+    }
+};
+
+const validateMapping = (): boolean => {
+    modalImportState.errors = [];
+
+    const requiredFields = modalImportState.dbFields.filter((field) => field.required);
+    const mappedDbFields = Object.values(modalImportState.fieldMapping);
+
+    // Check if all required fields are mapped
+    for (const required of requiredFields) {
+        if (!mappedDbFields.includes(required.value)) {
+            modalImportState.errors.push(`Required field "${required.label}" must be mapped`);
+        }
+    }
+
+    // Check for duplicate mappings
+    const duplicates = mappedDbFields.filter((field, index) => mappedDbFields.indexOf(field) !== index);
+
+    if (duplicates.length > 0) {
+        modalImportState.errors.push('Each database field can only be mapped once');
+    }
+
+    return modalImportState.errors.length === 0;
+};
+
+const proceedToPreview = () => {
+    if (validateMapping()) {
+        modalImportState.step = 3;
+    }
+};
+
+const executeImport = async () => {
+    if (!modalImportState.file) return;
+
+    modalImportState.isLoading = true;
+
+    try {
+        const formData = new FormData();
+        formData.append('file', modalImportState.file);
+
+        // Send original field mapping (for backward compatibility)
+        formData.append('field_mapping', JSON.stringify(modalImportState.fieldMapping));
+
+        // Send enhanced mapping with column information
+        const columnMapping = createColumnMapping();
+        formData.append('column_mapping', JSON.stringify(columnMapping));
+
+        const response = await axios.post(`${page.props.ziggy.location}/import`, formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
+
+        if (response.data.success) {
+            modalImportState.importResults = response.data;
+            notyf.success(`${response.data.message}`);
+
+            // Refresh table
+            if (tableRef.value && tableRef.value.dt) {
+                tableRef.value.dt.ajax.reload(null, false);
+            }
+
+            // Close modal after a delay
+            setTimeout(() => {
+                closeImportModal();
+            }, 3000);
+        } else {
+            throw new Error(response.data.message || 'Import failed');
+        }
+    } catch (error: any) {
+        console.error('Error importing:', error);
+        notyf.error(error.response?.data?.message || 'Import failed');
+    } finally {
+        modalImportState.isLoading = false;
+    }
+};
+
+// Create column mapping with indices
+const createColumnMapping = () => {
+    const columnMapping = {
+        headers: modalImportState.availableFields,
+        mappings: {} as Record<
+            string,
+            {
+                column_index: number;
+                header_name: string;
+                sample_value: string;
+            }
+        >,
+    };
+
+    // Map each database field to its column information
+    Object.entries(modalImportState.fieldMapping).forEach(([csvField, dbField]) => {
+        const columnIndex = modalImportState.availableFields.indexOf(csvField);
+        const sampleValue = modalImportState.filePreview[0]?.[csvField] || '';
+
+        columnMapping.mappings[dbField] = {
+            column_index: columnIndex,
+            header_name: csvField,
+            sample_value: sampleValue,
+        };
+    });
+
+    return columnMapping;
+};
+
+const goBackToMapping = () => {
+    modalImportState.step = 2;
+    modalImportState.errors = [];
+};
+
+const goBackToUpload = () => {
+    modalImportState.step = 1;
+    modalImportState.filePreview = [];
+    modalImportState.fieldMapping = {};
+    modalImportState.availableFields = [];
+    modalImportState.errors = [];
 };
 // Lifecycle hooks
 onMounted(() => {
+    // Export modal
     const modalExportElement = document.querySelector('#modal-export') as HTMLElement;
-
     if (modalExportElement) {
         const instanceOptions: InstanceOptions = {
             id: 'modal-export',
             override: true,
         };
-
         modalInstance.value = new Modal(modalExportElement, modalOptions, instanceOptions);
-    } else {
-        console.error('Modal element not found');
+    }
+
+    // Import modal
+    const modalImportElement = document.querySelector('#modal-import') as HTMLElement;
+    if (modalImportElement) {
+        const instanceOptions: InstanceOptions = {
+            id: 'modal-import',
+            override: true,
+        };
+        modalImportInstance.value = new Modal(modalImportElement, modalOptions, instanceOptions);
     }
 
     setTimeout(() => {
@@ -531,13 +791,14 @@ onUnmounted(() => {
                         <button
                             @click="exportAll"
                             type="button"
-                            class="rounded-lg border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-900 hover:bg-gray-100 hover:text-blue-700 focus:z-10 focus:ring-4 focus:ring-gray-100 focus:outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white dark:focus:ring-gray-700"
+                            class="cursor-pointer rounded-lg border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-900 hover:bg-gray-100 hover:text-blue-700 focus:z-10 focus:ring-4 focus:ring-gray-100 focus:outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white dark:focus:ring-gray-700"
                         >
                             Export All
                         </button>
                         <button
+                            @click="openImportModal"
                             type="button"
-                            class="rounded-lg border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-900 hover:bg-gray-100 hover:text-blue-700 focus:z-10 focus:ring-4 focus:ring-gray-100 focus:outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white dark:focus:ring-gray-700"
+                            class="cursor-pointer rounded-lg border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-900 hover:bg-gray-100 hover:text-blue-700 focus:z-10 focus:ring-4 focus:ring-gray-100 focus:outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white dark:focus:ring-gray-700"
                         >
                             Import
                         </button>
@@ -663,24 +924,263 @@ onUnmounted(() => {
                         :disabled="modalExportState.isLoading"
                         class="rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800 focus:ring-4 focus:ring-blue-300 focus:outline-none disabled:opacity-50 dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800"
                     >
-                        <span v-if="modalExportState.isLoading" class="flex items-center">
-                            <svg
-                                class="mr-2 -ml-1 h-4 w-4 animate-spin text-white"
-                                xmlns="http://www.w3.org/2000/svg"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                            >
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                <path
-                                    class="opacity-75"
-                                    fill="currentColor"
-                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                                ></path>
-                            </svg>
-                            Exporting...
-                        </span>
+                        <span v-if="modalExportState.isLoading" class="flex items-center"> Exporting... </span>
                         <span v-else>Export {{ modalExportState.exportFormat.toUpperCase() }}</span>
                     </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div
+        id="modal-import"
+        class="fixed top-0 right-0 left-0 z-50 hidden h-[calc(100%-1rem)] max-h-full w-full items-center justify-center overflow-x-hidden overflow-y-auto md:inset-0"
+    >
+        <div class="relative max-h-full w-full max-w-4xl p-4">
+            <div class="relative rounded-lg bg-white shadow-lg dark:bg-gray-700">
+                <!-- Modal header -->
+                <div class="flex items-center justify-between rounded-t border-b border-gray-200 p-4 dark:border-gray-600">
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+                            {{ modalImportState.title }}
+                        </h3>
+
+                        <div class="mt-2 flex items-center space-x-2">
+                            <div
+                                v-for="step in 3"
+                                :key="step"
+                                :class="[
+                                    'flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium',
+                                    step <= modalImportState.step
+                                        ? 'bg-blue-600 text-white'
+                                        : 'bg-gray-200 text-gray-600 dark:bg-gray-600 dark:text-gray-400',
+                                ]"
+                            >
+                                {{ step }}
+                            </div>
+                            <div
+                                v-if="step < 3"
+                                :class="['h-0.5 w-8', step < modalImportState.step ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-600']"
+                            ></div>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        @click="closeImportModal"
+                        class="ms-auto inline-flex h-8 w-8 items-center justify-center rounded-lg bg-transparent text-sm text-gray-400 hover:bg-gray-200 hover:text-gray-900 dark:hover:bg-gray-600 dark:hover:text-white"
+                    >
+                        <X class="h-4 w-4" />
+                    </button>
+                </div>
+
+                <!-- Modal body -->
+                <div class="max-h-96 overflow-y-auto p-6">
+                    <!-- Step 1: File Upload -->
+                    <div v-if="modalImportState.step === 1" class="space-y-6">
+                        <div class="text-center">
+                            <Upload class="mx-auto mb-4 h-12 w-12 text-gray-400" />
+                            <h4 class="mb-2 text-lg font-medium text-gray-900 dark:text-white">Upload CSV or Excel File</h4>
+                            <p class="mb-6 text-gray-600 dark:text-gray-400">Select a file containing user data to import</p>
+                        </div>
+
+                        <div class="rounded-lg border-2 border-dashed border-gray-300 p-6 dark:border-gray-600">
+                            <input
+                                ref="fileInputRef"
+                                type="file"
+                                accept=".csv,.xlsx,.xls"
+                                @change="handleFileUpload"
+                                class="hidden"
+                                id="file-upload"
+                            />
+                            <label for="file-upload" class="flex cursor-pointer flex-col items-center justify-center">
+                                <FileText class="mb-2 h-8 w-8 text-gray-400" />
+                                <span class="text-sm text-gray-600 dark:text-gray-400"> Click to upload or drag and drop </span>
+                                <span class="mt-1 text-xs text-gray-500 dark:text-gray-500"> CSV, XLSX (MAX 10MB) </span>
+                            </label>
+                        </div>
+
+                        <div class="rounded-lg bg-blue-50 p-4 dark:bg-blue-900/20">
+                            <h5 class="mb-2 text-sm font-medium text-blue-800 dark:text-blue-300">File Requirements:</h5>
+                            <ul class="space-y-1 text-xs text-blue-700 dark:text-blue-400">
+                                <li>• First row should contain column headers</li>
+                                <li>• Required fields: Name, Email</li>
+                                <li>• Optional fields: Password, Role ID</li>
+                                <li>• Maximum 1000 rows per import</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Field Mapping -->
+                    <div v-if="modalImportState.step === 2" class="space-y-6">
+                        <div class="mb-6 text-center">
+                            <h4 class="mb-2 text-lg font-medium text-gray-900 dark:text-white">Map Your Fields</h4>
+                            <p class="text-gray-600 dark:text-gray-400">Match your file columns with database fields</p>
+                        </div>
+
+                        <!-- Error messages -->
+                        <div
+                            v-if="modalImportState.errors.length > 0"
+                            class="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20"
+                        >
+                            <div class="flex">
+                                <AlertCircle class="mt-0.5 mr-2 h-5 w-5 text-red-400" />
+                                <div>
+                                    <h5 class="text-sm font-medium text-red-800 dark:text-red-300">Please fix the following errors:</h5>
+                                    <ul class="mt-2 space-y-1 text-sm text-red-700 dark:text-red-400">
+                                        <li v-for="error in modalImportState.errors" :key="error">• {{ error }}</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Field mapping table -->
+                        <div class="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-600">
+                            <table class="w-full text-sm">
+                                <thead class="bg-gray-50 dark:bg-gray-700">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left font-medium text-gray-900 dark:text-white">Your File Column</th>
+                                        <th class="px-4 py-3 text-left font-medium text-gray-900 dark:text-white">Database Field</th>
+                                        <th class="px-4 py-3 text-left font-medium text-gray-900 dark:text-white">Sample Data</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-200 dark:divide-gray-600">
+                                    <tr v-for="(field, index) in modalImportState.availableFields" :key="field">
+                                        <td class="px-4 py-3 font-medium text-gray-900 dark:text-white">
+                                            {{ field }}
+                                        </td>
+                                        <td class="px-4 py-3">
+                                            <select
+                                                :value="modalImportState.fieldMapping[field] || ''"
+                                                @change="handleFieldMapping(field, ($event.target as HTMLSelectElement).value)"
+                                                class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                                            >
+                                                <option value="">-- Skip this field --</option>
+                                                <option v-for="dbField in modalImportState.dbFields" :key="dbField.value" :value="dbField.value">
+                                                    {{ dbField.label }} {{ dbField.required ? '*' : '' }}
+                                                </option>
+                                            </select>
+                                        </td>
+                                        <td class="px-4 py-3 text-gray-600 dark:text-gray-400">
+                                            {{ modalImportState.filePreview[0]?.[field] || 'N/A' }}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="rounded-lg bg-gray-50 p-4 dark:bg-gray-800">
+                            <p class="text-xs text-gray-600 dark:text-gray-400"><span class="text-red-500">*</span> Required fields must be mapped</p>
+                        </div>
+                    </div>
+
+                    <!-- Step 3: Preview & Confirmation -->
+                    <div v-if="modalImportState.step === 3" class="space-y-6">
+                        <div class="mb-6 text-center">
+                            <CheckCircle2 class="mx-auto mb-4 h-12 w-12 text-green-500" />
+                            <h4 class="mb-2 text-lg font-medium text-gray-900 dark:text-white">Ready to Import</h4>
+                            <p class="text-gray-600 dark:text-gray-400">Review your import settings before proceeding</p>
+                        </div>
+
+                        <!-- Import summary -->
+                        <div class="rounded-lg bg-gray-50 p-4 dark:bg-gray-800">
+                            <h5 class="mb-3 font-medium text-gray-900 dark:text-white">Import Summary</h5>
+                            <div class="grid grid-cols-2 gap-4 text-sm">
+                                <div>
+                                    <span class="text-gray-600 dark:text-gray-400">File:</span>
+                                    <span class="ml-2 text-gray-900 dark:text-white">{{ modalImportState.file?.name }}</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-600 dark:text-gray-400">Total Rows:</span>
+                                    <span class="ml-2 text-gray-900 dark:text-white">{{ modalImportState.filePreview.length }}</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-600 dark:text-gray-400">Mapped Fields:</span>
+                                    <span class="ml-2 text-gray-900 dark:text-white">{{ Object.keys(modalImportState.fieldMapping).length }}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Field mapping review -->
+                        <div class="rounded-lg border border-gray-200 p-4 dark:border-gray-600">
+                            <h5 class="mb-3 font-medium text-gray-900 dark:text-white">Field Mapping</h5>
+                            <div class="space-y-2">
+                                <div
+                                    v-for="(dbField, csvField) in modalImportState.fieldMapping"
+                                    :key="csvField"
+                                    class="flex items-center justify-between text-sm"
+                                >
+                                    <span class="text-gray-600 dark:text-gray-400">{{ csvField }}</span>
+                                    <span class="text-gray-900 dark:text-white"
+                                        >→ {{ modalImportState.dbFields.find((f) => f.value === dbField)?.label }}</span
+                                    >
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Import results (if completed) -->
+                        <div
+                            v-if="modalImportState.importResults"
+                            class="rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-900/20"
+                        >
+                            <div class="flex">
+                                <CheckCircle2 class="mt-0.5 mr-2 h-5 w-5 text-green-400" />
+                                <div>
+                                    <h5 class="text-sm font-medium text-green-800 dark:text-green-300">Import Completed Successfully!</h5>
+                                    <p class="mt-1 text-sm text-green-700 dark:text-green-400">
+                                        {{ modalImportState.importResults.imported_count }} users imported successfully
+                                        <span v-if="modalImportState.importResults.skipped_count > 0">
+                                            ({{ modalImportState.importResults.skipped_count }} skipped)
+                                        </span>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Modal footer -->
+                <div class="flex items-center justify-between rounded-b border-t border-gray-200 p-4 dark:border-gray-600">
+                    <div class="flex gap-2">
+                        <button
+                            v-if="modalImportState.step > 1 && !modalImportState.importResults"
+                            @click="modalImportState.step === 2 ? goBackToUpload() : goBackToMapping()"
+                            type="button"
+                            :disabled="modalImportState.isLoading"
+                            class="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-100 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
+                        >
+                            Back
+                        </button>
+                    </div>
+
+                    <div class="flex gap-3">
+                        <button
+                            @click="closeImportModal"
+                            type="button"
+                            class="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-100 focus:outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
+                        >
+                            {{ modalImportState.importResults ? 'Close' : 'Cancel' }}
+                        </button>
+
+                        <button
+                            v-if="modalImportState.step === 2"
+                            @click="proceedToPreview"
+                            type="button"
+                            :disabled="modalImportState.isLoading"
+                            class="rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800 focus:ring-4 focus:ring-blue-300 disabled:opacity-50 dark:bg-blue-600 dark:hover:bg-blue-700"
+                        >
+                            Continue to Preview
+                        </button>
+
+                        <button
+                            v-if="modalImportState.step === 3 && !modalImportState.importResults"
+                            @click="executeImport"
+                            type="button"
+                            :disabled="modalImportState.isLoading"
+                            class="rounded-lg bg-green-700 px-4 py-2 text-sm font-medium text-white hover:bg-green-800 focus:ring-4 focus:ring-green-300 disabled:opacity-50 dark:bg-green-600 dark:hover:bg-green-700"
+                        >
+                            <span v-if="modalImportState.isLoading" class="flex items-center"> Importing... </span>
+                            <span v-else>Import Users</span>
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

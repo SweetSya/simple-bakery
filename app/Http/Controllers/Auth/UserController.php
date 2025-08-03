@@ -2,10 +2,18 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\Exports\UsersExport;
 use App\Http\Controllers\Controller;
+use App\Jobs\ProcessExport;
+use App\Jobs\ProcessImport;
+use App\Models\JobWatcher;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cookie;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Process;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 
 class UserController extends Controller
@@ -232,7 +240,6 @@ class UserController extends Controller
     public function export(Request $request)
     {
         $request->validate([
-            'ids' => 'required|array|min:1',
             'fields' => 'nullable|array',
             'format' => 'required|in:csv,excel,pdf'
         ]);
@@ -240,7 +247,7 @@ class UserController extends Controller
         $userIds = $request->input('ids', []);
         $format = $request->input('format', 'csv');
         $fields = $request->input('fields', []);
-        if ($request->input('all')) {
+        if ($request->input('export_all')) {
             $userIds = User::pluck('id')->toArray();
         }
         if (empty($userIds)) {
@@ -250,12 +257,275 @@ class UserController extends Controller
             return response()->json(['message' => 'No fields selected for export.'], 422);
         }
         try {
-            // Logic to export users based on the format
-            // This is a placeholder, implement actual export logic here
-            return response()->json(['message' => 'Export received.. processing now']);
+            //Logic to export users based on the format
+            $uniqueId = time() . '-' . uniqid();
+            ProcessExport::dispatch('Users', $userIds, $fields, $format, $uniqueId, UsersExport::class)->onQueue('default');
+            // This is a placeholder, implement actual exportLogic here
+            JobWatcher::create([
+                'job_id' => $uniqueId,
+                'user_id' => Auth::user()->id,
+                'job_type' => 'export',
+                'job_data' => [],
+            ]);
+            return response()->json(['message' => 'Export received.. processing now', 'total' => count($userIds)], 200);
         } catch (\Exception $e) {
-            return back()
-                ->withCookie(Cookie::make('notyf_flash_error', 'Failed to export users.', 1));
+            return response()->json(['message' => 'Failed to process export.', 'error' => $e->getMessage()], 500);
         }
+    }
+
+    public function importPreview(Request $request)
+    {
+        $request->validate([
+            'file' => 'required|file|mimes:csv,xlsx,xls|max:10240' // 10MB max
+        ]);
+
+        try {
+            $file = $request->file('file');
+            $extension = $file->getClientOriginalExtension();
+
+            if ($extension === 'csv') {
+                $data = $this->processCsvFile($file);
+            } else {
+                $data = $this->processExcelFile($file);
+            }
+
+            if (empty($data)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No data found in the file'
+                ], 422);
+            }
+
+            if (count($data) > 1000) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'File contains too many rows. Maximum 1000 rows allowed.'
+                ], 422);
+            }
+
+            $headers = array_keys($data[0]);
+            $preview = array_slice($data, 0, 5); // Show first 5 rows for preview
+
+            return response()->json([
+                'success' => true,
+                'headers' => $headers,
+                'preview' => $preview,
+                'total_rows' => count($data)
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Import preview failed: ' . $e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to process file: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function import(Request $request)
+    {
+        $request->validate([
+            'file' => 'required|file|mimes:csv,xlsx,xls|max:10240',
+            'field_mapping' => 'required|json'
+        ]);
+
+        try {
+            $file = $request->file('file');
+            $fieldMapping = json_decode($request->input('field_mapping'), true);
+
+            if (empty($fieldMapping)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Field mapping is required'
+                ], 422);
+            }
+
+            // Validate required fields are mapped
+            $requiredFields = ['name', 'email'];
+            $mappedDbFields = array_values($fieldMapping);
+
+            foreach ($requiredFields as $required) {
+                if (!in_array($required, $mappedDbFields)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Required field '{$required}' must be mapped"
+                    ], 422);
+                }
+            }
+
+            $finalMapping = json_decode($request->column_mapping, true);
+            // Store the file temporarily and pass the path instead of the file object
+            $uniqueId = time() . '-' . uniqid();
+            $fileName = "import_{$uniqueId}.xlsx";
+            $filePath = "imports/{$fileName}";
+
+            // Store file in local storage
+            Storage::disk('local')->put($filePath, file_get_contents($file->getRealPath()));
+            ProcessImport::dispatch('Users', $uniqueId, $finalMapping, $filePath)
+                ->onQueue('default');
+
+            JobWatcher::create([
+                'job_id' => $uniqueId,
+                'user_id' => Auth::user()->id,
+                'job_type' => 'import',
+                'job_data' => [],
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Import received.. processing now',
+
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Import failed: ' . $e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Import failed: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    private function processCsvFile($file): array
+    {
+        $path = $file->getRealPath();
+        $data = [];
+
+        if (($handle = fopen($path, 'r')) !== false) {
+            $headers = fgetcsv($handle);
+
+            if (!$headers) {
+                throw new \Exception('Invalid CSV file format');
+            }
+
+            while (($row = fgetcsv($handle)) !== false) {
+                if (count($row) === count($headers)) {
+                    $data[] = array_combine($headers, $row);
+                }
+            }
+
+            fclose($handle);
+        }
+
+        return $data;
+    }
+
+    private function processExcelFile($file): array
+    {
+        // You'll need to install PhpSpreadsheet: composer require phpoffice/phpspreadsheet
+        $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($file->getRealPath());
+        $worksheet = $spreadsheet->getActiveSheet();
+        $data = [];
+
+        $highestRow = $worksheet->getHighestRow();
+        $highestColumn = $worksheet->getHighestColumn();
+
+        // Get headers from first row
+        $headers = [];
+        for ($col = 'A'; $col <= $highestColumn; $col++) {
+            $headers[] = $worksheet->getCell($col . '1')->getValue();
+        }
+
+        // Get data rows
+        for ($row = 2; $row <= $highestRow; $row++) {
+            $rowData = [];
+            for ($col = 'A'; $col <= $highestColumn; $col++) {
+                $rowData[] = $worksheet->getCell($col . $row)->getValue();
+            }
+
+            if (count($rowData) === count($headers)) {
+                $data[] = array_combine($headers, $rowData);
+            }
+        }
+
+        return $data;
+    }
+
+    private function processImportData(array $data, array $fieldMapping): array
+    {
+        $imported = 0;
+        $skipped = 0;
+        $errors = [];
+
+        foreach ($data as $index => $row) {
+            try {
+                $userData = [];
+
+                // Map fields according to field mapping
+                foreach ($fieldMapping as $csvField => $dbField) {
+                    if (isset($row[$csvField])) {
+                        $value = trim($row[$csvField]);
+
+                        // Handle special fields
+                        switch ($dbField) {
+                            case 'email':
+                                if (!filter_var($value, FILTER_VALIDATE_EMAIL)) {
+                                    throw new \Exception("Invalid email format: {$value}");
+                                }
+                                $userData[$dbField] = $value;
+                                break;
+
+                            case 'password':
+                                if (!empty($value)) {
+                                    $userData[$dbField] = bcrypt($value);
+                                }
+                                break;
+
+                            case 'role_id':
+                                if (!empty($value)) {
+                                    // Validate role exists
+                                    $role = \App\Models\Role::find($value);
+                                    if (!$role) {
+                                        throw new \Exception("Role with ID {$value} not found");
+                                    }
+                                    $userData[$dbField] = $value;
+                                }
+                                break;
+
+                            case 'email_verified_at':
+                                if (!empty($value) && in_array(strtolower($value), ['yes', 'true', '1', 'verified'])) {
+                                    $userData[$dbField] = now();
+                                }
+                                break;
+
+                            default:
+                                if (!empty($value)) {
+                                    $userData[$dbField] = $value;
+                                }
+                        }
+                    }
+                }
+
+                // Validate required fields
+                if (empty($userData['name']) || empty($userData['email'])) {
+                    throw new \Exception('Name and email are required');
+                }
+
+                // Check if user already exists
+                $existingUser = User::where('email', $userData['email'])->first();
+                if ($existingUser) {
+                    $skipped++;
+                    continue;
+                }
+
+                // Set default password if not provided
+                if (!isset($userData['password'])) {
+                    $userData['password'] = bcrypt('password123');
+                }
+
+                // Create user
+                User::create($userData);
+                $imported++;
+            } catch (\Exception $e) {
+                $errors[] = "Row " . ($index + 2) . ": " . $e->getMessage();
+                $skipped++;
+            }
+        }
+
+        return [
+            'imported' => $imported,
+            'skipped' => $skipped,
+            'errors' => $errors
+        ];
     }
 }

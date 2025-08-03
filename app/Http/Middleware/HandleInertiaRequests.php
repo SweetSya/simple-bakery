@@ -51,6 +51,7 @@ class HandleInertiaRequests extends Middleware
                 ...(new Ziggy)->toArray(),
                 'location' => $request->url(),
             ],
+            'jobs' => $request->user() ? $request->user()->jobs()->orderBy('created_at', 'desc')->limit(5)->get() : [],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
             'flash' => $this->getFlashData($request)
         ];
