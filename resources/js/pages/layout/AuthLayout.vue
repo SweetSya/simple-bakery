@@ -235,11 +235,11 @@ function toggleDarkMode() {
             <div class="flex px-4 py-3 hover:bg-gray-100 dark:hover:bg-gray-700">
                 <div class="shrink-0">
                     <Download
-                        v-if="item.status === 'completed' && item.job_data.download"
+                        v-if="item.status === 'completed' && item.job_data.download_url"
                         class="h-6 w-6 rounded-full bg-gray-100 p-1 text-gray-500 dark:bg-gray-700 dark:text-gray-400"
                     />
                     <Check
-                        v-if="item.status === 'completed' && !item.job_data.download"
+                        v-if="item.status === 'completed' && !item.job_data.download_url"
                         class="h-6 w-6 rounded-full bg-gray-100 p-1 text-gray-500 dark:bg-gray-700 dark:text-gray-400"
                     />
                     <Info
@@ -255,8 +255,8 @@ function toggleDarkMode() {
                     <div class="flex items-center justify-between text-xs text-blue-600 dark:text-blue-500">
                         <span>{{ humanReadableTime(item.created_at) }}</span>
                         <button
-                            v-if="item.status === 'completed' && item.job_data.download"
-                            @click="handleDownload(item.job_data.download)"
+                            v-if="item.status === 'completed' && item.job_data.download_url"
+                            @click="handleDownload(item.job_data.download_url)"
                             class="inline-flex cursor-pointer items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100 dark:bg-blue-900/50 dark:text-blue-300 dark:hover:bg-blue-900"
                         >
                             <Download class="mr-1 h-3 w-3" />

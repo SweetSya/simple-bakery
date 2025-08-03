@@ -957,10 +957,10 @@ onUnmounted(() => {
                             >
                                 {{ step }}
                             </div>
-                            <div
+                            <!-- <div
                                 v-if="step < 3"
                                 :class="['h-0.5 w-8', step < modalImportState.step ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-600']"
-                            ></div>
+                            ></div> -->
                         </div>
                     </div>
                     <button

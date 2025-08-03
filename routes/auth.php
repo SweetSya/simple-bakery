@@ -9,8 +9,7 @@ use Inertia\Inertia;
 
 Route::group(['prefix' => 'admin-panel', 'middleware' => ['checkAuth:administrator,staff,guest']], function () {
     Route::get('/dashboard', [DashboardController::class, 'view'])->name('dashboard');
-    Route::get('/download/{filename}', [DownloadController::class, 'download'])
-        ->name('download.file');
+    Route::get('/download/export/{file}', [DownloadController::class, 'export'])->name('download.export');
     Route::group(['prefix' => 'role'], function () {
         Route::get('/', [RoleController::class, 'view'])->name('role.view');
         Route::get('/all', [RoleController::class, 'all'])->name('role.all');

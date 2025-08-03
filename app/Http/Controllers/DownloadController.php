@@ -13,7 +13,7 @@ class DownloadController extends Controller
     /**
      * Download file from storage
      */
-    public function download(Request $request, $filename)
+    public function export(Request $request, $filename)
     {
         try {
             // Validate filename to prevent directory traversal
@@ -24,7 +24,7 @@ class DownloadController extends Controller
 
             // Check if file exists
             if (!Storage::disk('local')->exists($filePath)) {
-               dd('File not found: ' . $filePath);
+                dd('File not found: ' . $filePath);
                 abort(404, 'File not found');
             }
 

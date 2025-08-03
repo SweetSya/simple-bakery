@@ -5,72 +5,134 @@ namespace App\Jobs;
 use App\Models\JobWatcher;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Maatwebsite\Excel\Facades\Excel;
-use Maatwebsite\Excel\Excel as ExcelFormat; // alias for constants
 
 class ProcessExport implements ShouldQueue
 {
     use Queueable;
 
-    protected $ids = [];
-    protected $fields = [];
-    protected $exports;
-    protected $type;
+    protected $entityName;
+    protected $recordIds;
+    protected $fields;
+    protected $format;
     protected $uniqueId;
-    protected $table;
+    protected $exportClass;
 
-    public function __construct(string $table, array $ids = [], array $fields = [], string $type = 'excel', string $uniqueId = '', $exports)
+    /**
+     * Create a new job instance.
+     */
+    public function __construct(string $entityName, array $recordIds, array $fields, string $format, string $uniqueId, string $exportClass)
     {
-        $this->table = $table;
-        $this->ids = $ids;
+        $this->entityName = $entityName;
+        $this->recordIds = $recordIds;
         $this->fields = $fields;
-        $this->exports = $exports; // class name like UsersExport::class
+        $this->format = $format;
         $this->uniqueId = $uniqueId;
-        $this->type = $type === 'csv' ? 'csv' : 'xlsx'; // string for file extension
+        $this->exportClass = $exportClass;
     }
 
+    /**
+     * Execute the job.
+     */
     public function handle(): void
     {
-        JobWatcher::where('job_id', $this->uniqueId)->update([
-            'status' => 'processing',
-        ]);
+        try {
+            // Update job status
+            $jobWatcher = JobWatcher::where('job_id', $this->uniqueId)->first();
 
-        // Determine the correct writer type
-        $writerType = $this->type === 'csv' ? ExcelFormat::CSV : ExcelFormat::XLSX;
+            if (!$jobWatcher) {
+                Log::error("Job watcher not found for job ID: {$this->uniqueId}");
+                return;
+            }
 
-        // Store the export file
-        Excel::store(
-            new $this->exports($this->ids, $this->fields),
-            'exports/' . $this->uniqueId . '.' . $this->type,
-            null,
-            $writerType
-        );
+            $jobWatcher->update([
+                'status' => 'processing',
+                'job_data' => array_merge($jobWatcher->job_data, [
+                    'message' => "Processing export of {$this->entityName}...",
+                ])
+            ]);
 
-        JobWatcher::where('job_id', $this->uniqueId)->update([
-            'status' => 'completed',
-            'job_data' => [
-                'download' => route('download.file', [
-                    'filename' => $this->uniqueId . '.' . $this->type,
-                ]),
-                'file_path' => 'exports/' . $this->uniqueId . '.' . $this->type,
-                'file_name' => $this->uniqueId . '.' . $this->type,
-                'message' => 'Your export has been completed successfully. Total there is ' . count($this->ids) . ' records exported.',
-                'title' => 'Export completed (' . $this->table . ')',
-            ],
-        ]);
+            // Create export instance
+            $exportInstance = new $this->exportClass($this->recordIds, $this->fields);
+
+            // Generate filename
+            $filename = $this->generateFilename();
+            $filePath = "exports/{$filename}";
+
+            // Export based on format
+            switch ($this->format) {
+                case 'excel':
+                    Excel::store($exportInstance, $filePath, 'local', \Maatwebsite\Excel\Excel::XLSX);
+                    break;
+                case 'csv':
+                    Excel::store($exportInstance, $filePath, 'local', \Maatwebsite\Excel\Excel::CSV);
+                    break;
+                case 'pdf':
+                    Excel::store($exportInstance, $filePath, 'local', \Maatwebsite\Excel\Excel::DOMPDF);
+                    break;
+                default:
+                    throw new \Exception("Unsupported export format: {$this->format}");
+            }
+
+            // Update job with success
+            $jobWatcher->update([
+                'status' => 'completed',
+                'job_data' => array_merge($jobWatcher->job_data, [
+                    'title' => "Export completed ({$this->entityName})",
+                    'message' => "Export completed successfully!",
+                    'file_path' => $filePath,
+                    'file_name' => $filename,
+                    'download_url' => route('download.export', ['file' => $filename]),
+                    'completed_at' => now()->toISOString()
+                ])
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Export job failed: ' . $e->getMessage(), [
+                'job_id' => $this->uniqueId,
+                'entity' => $this->entityName,
+                'trace' => $e->getTraceAsString()
+            ]);
+            $jobWatcher->update([
+                'status' => 'failed',
+                'job_data' => array_merge($jobWatcher->job_data ?? [], [
+                    'title' => "Export failed ({$this->entityName})",
+                    'message' => 'Export failed: ' . $e->getMessage(),
+                    'failed_at' => now()->toISOString()
+                ])
+            ]);
+
+            throw $e;
+        }
     }
 
-    public function failed(\Throwable $exception): void
+    /**
+     * Generate filename for export
+     */
+    private function generateFilename(): string
     {
-        JobWatcher::where('job_id', $this->uniqueId)->update([
-            'status' => 'failed',
-            'job_data' => [
-                'message' => $exception->getMessage(),
-                'title' => 'Export failed.',
-            ],
-        ]);
+        $timestamp = now()->format('Y-m-d_H-i-s');
+        $extension = $this->getFileExtension();
 
-        Log::error("Export job failed [{$this->uniqueId}]: " . $exception->getMessage());
+        return "{$this->entityName}_export_{$timestamp}.{$extension}";
+    }
+
+    /**
+     * Get file extension based on format
+     */
+    private function getFileExtension(): string
+    {
+        switch ($this->format) {
+            case 'excel':
+                return 'xlsx';
+            case 'csv':
+                return 'csv';
+            case 'pdf':
+                return 'pdf';
+            default:
+                return 'xlsx';
+        }
     }
 }
